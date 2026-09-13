@@ -7,68 +7,69 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  --bg:#182130; --panel:#1f2a3b; --line:#2c3a4f; --text:#e8eef6; --muted:#8a9bb2;
-  --amber:#f2b544; --amber-dim:#5a4520; --green:#4fd18b; --red:#f06a6a; --link:#9ec5ff;
-}
+:root{--bg:#182130;--panel:#1f2a3b;--line:#2c3a4f;--text:#e8eef6;--muted:#8a9bb2;--amber:#f2b544;--amber-dim:#5a4520;--green:#4fd18b;--red:#f06a6a;--link:#9ec5ff}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 "IBM Plex Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums}
 a{color:var(--link)}
-button,input,select{font:inherit;color:inherit}
-.top{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+button,input{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center}
 h1{font-size:19px;font-weight:600;margin:0}
 .total{color:var(--amber);font-weight:600;font-size:19px}
 .total small{color:var(--muted);font-weight:400;font-size:13px;margin-left:6px}
 .spacer{flex:1}
 .stamp{color:var(--muted);font-size:13px}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:middle}
+.live.off{background:var(--muted)}
 button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
 button:hover{border-color:var(--muted)}
 button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 button.primary{background:var(--amber);color:#1a1300;border-color:var(--amber);font-weight:600}
 button[disabled]{opacity:.5;cursor:wait}
-.controls{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
-input[type=search]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:220px}
+.controls{padding:10px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+input[type=search]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:240px}
 .chip{border-radius:999px;padding:5px 12px;font-size:13px}
 .chip.on{background:var(--amber-dim);border-color:var(--amber);color:var(--amber)}
 .hint{color:var(--muted);font-size:13px;margin-left:auto}
 table{width:100%;border-collapse:collapse}
-th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
-th{position:sticky;top:57px;background:var(--bg);color:var(--muted);font-weight:500;font-size:13px;cursor:pointer;user-select:none}
-th:hover{color:var(--text)}
-th.on{color:var(--text)}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:53px;background:var(--bg);color:var(--muted);font-weight:500;font-size:13px;cursor:pointer;user-select:none;z-index:1}
+th:hover,th.on{color:var(--text)}
 th.on::after{content:" ▾";color:var(--amber)}
 th.on.asc::after{content:" ▴"}
-th:first-child,td:first-child{text-align:left;padding-left:20px}
-td.q{white-space:normal;max-width:520px}
+th.star,td.star{text-align:center;padding:8px 4px 8px 14px;cursor:pointer;width:34px;font-size:17px;color:var(--muted)}
+td.star.on{color:var(--amber)}
+th.q,td.q{text-align:left}
+td.q{white-space:normal;max-width:480px}
 td.q a{text-decoration:none;font-weight:500;color:var(--text)}
 td.q a:hover{color:var(--link);text-decoration:underline}
 td.q .ev{display:block;color:var(--muted);font-size:12.5px}
-td.rate{min-width:170px}
+td.rate{min-width:150px}
 .bar{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .bar i{display:block;height:8px;border-radius:2px;background:var(--amber)}
 .bar b{font-weight:600;color:var(--amber);min-width:52px;text-align:right}
-td.ok{color:var(--green)}
-td.bad{color:var(--red)}
-td.dim{color:var(--muted)}
+td.open a{font-size:13px;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:4px 9px}
+td.open a:hover{border-color:var(--link)}
+td.ok{color:var(--green)} td.bad{color:var(--red)} td.dim{color:var(--muted)}
 td.bk-nobids,td.bk-noasks{color:var(--amber);font-weight:600}
 td.bk-empty{color:var(--green);font-weight:600}
 td.bk-both{color:var(--muted)}
-.chip[data-side]{border-color:var(--amber)}
+tbody tr:hover{background:var(--panel)}
 .state{padding:40px 20px;color:var(--muted);text-align:center}
 .state.err{color:var(--red)}
-tbody tr:hover{background:var(--panel)}
+.pager{display:flex;gap:8px;align-items:center;justify-content:center;padding:14px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.pager button{padding:5px 10px}
+.pager input{width:56px;text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px}
 @media (max-width:760px){
   th{display:none}
   table,tbody,tr,td{display:block}
-  tr{padding:10px 16px;border-bottom:1px solid var(--line)}
+  tr{padding:10px 16px;border-bottom:1px solid var(--line);position:relative}
   td{border:0;padding:2px 0;text-align:left;white-space:normal}
-  td:first-child{padding-left:0}
+  td.star{position:absolute;right:12px;top:8px;width:auto}
   td.rate .bar{justify-content:flex-start}
   td[data-l]::before{content:attr(data-l) " ";color:var(--muted);font-size:12.5px}
-  td.rate::before{display:none}
-  .top{padding:12px 16px}
+  td.rate::before,td.open::before{display:none}
+  td.open{padding-top:6px}
 }
-@media (prefers-reduced-motion:no-preference){.bar i{transition:width .25s}}
 </style>
 </head>
 <body>
@@ -76,183 +77,206 @@ tbody tr:hover{background:var(--panel)}
   <h1>Polymarket LP rewards</h1>
   <div class="total" id="total">—<small>/day shown</small></div>
   <div class="spacer"></div>
-  <span class="stamp" id="stamp"></span>
+  <span class="stamp"><span class="live off" id="live"></span><span id="stamp">Loading…</span></span>
   <button id="csv">Download CSV</button>
-  <button class="primary" id="refresh">Refresh</button>
+  <button class="primary" id="refresh">Refresh all</button>
 </header>
 <div class="controls">
   <input type="search" id="q" placeholder="Search markets…" autocomplete="off">
-  <button class="chip on" data-k="">All</button>
-  <button class="chip" data-side="1">One-sided only</button>
-  <button class="chip" data-k="mlbb|mpl|m-league|mobile legends">MLBB</button>
-  <button class="chip" data-k="cs2|counter-strike|counter strike|iem|blast|esl">CS2</button>
-  <button class="chip" data-k="honor of kings|kpl|kgl|hok">HoK</button>
-  <button class="chip" data-k="dota|valorant|lol|league of legends|lck|lpl|worlds">Other esports</button>
-  <button class="chip" data-k="bitcoin|btc|ethereum|eth|solana|sol|crypto">Crypto</button>
-  <span class="hint">Click a column to sort · click a market to open it</span>
+  <button class="chip on" data-view="all">All</button>
+  <button class="chip" data-view="one">One-sided only</button>
+  <button class="chip" data-view="empty">Empty only</button>
+  <button class="chip" data-view="fav">★ Bookmarks (<span id="favn">0</span>)</button>
+  <span class="hint">Click a column to sort · ★ to bookmark · live refresh every 10 s</span>
 </div>
 <div id="state" class="state">Loading…</div>
 <table id="t" hidden>
   <thead><tr>
+    <th class="star" title="Bookmarked first" data-k="fav">★</th>
     <th data-k="question" class="q">Market</th>
     <th data-k="rate" class="on">Reward $/day</th>
+    <th data-k="book">Book</th>
     <th data-k="minSize">Min order $</th>
     <th data-k="maxSpread">Max spread ¢</th>
     <th data-k="spread">Spread now ¢</th>
-    <th data-k="book">Book</th>
     <th data-k="yes">Yes ¢</th>
     <th data-k="vol">24h vol $</th>
     <th data-k="liq">Liquidity $</th>
     <th data-k="end">Ends</th>
+    <th></th>
   </tr></thead>
   <tbody></tbody>
 </table>
+<div class="pager" id="pager" hidden>
+  <button id="first">«</button><button id="prev">‹</button>
+  <span>Page <input id="pg" type="number" min="1" value="1"> of <span id="pgn">1</span></span>
+  <button id="next">›</button><button id="last">»</button>
+  <span id="pginfo"></span>
+</div>
 
 <script>
 const CLOB="https://clob.polymarket.com", GAMMA="https://gamma-api.polymarket.com", SITE="https://polymarket.com";
+const PAGE_SIZE=50, LIVE_MS=10000, FULL_MS=5*60000;
 const $=s=>document.querySelector(s);
-let rows=[], sortK="rate", sortAsc=false, chipRe=null, query="", oneSided=false;
+const BOOK_RANK={empty:3,"no bids":2,"no asks":2,both:1,"?":0,"…":0};
+let rows=[], byCid=new Map(), sortK="rate", sortAsc=false, view="all", query="", page=1;
+let favs=new Set(JSON.parse(localStorage.getItem("pm-rewards-favs")||"[]"));
+let liveTimer=null, fullTimer=null, busy=false;
 
 const num=x=>{const n=parseFloat(x);return Number.isFinite(n)?n:0};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=n=>n.toLocaleString(undefined,{maximumFractionDigits:0});
+const setState=(msg,err)=>{const el=$("#state");el.hidden=false;el.className="state"+(err?" err":"");el.textContent=msg;};
+const saveFavs=()=>{localStorage.setItem("pm-rewards-favs",JSON.stringify([...favs]));$("#favn").textContent=favs.size;};
 
-function marketUrl(g,fallbackSlug){
-  const ms=g?.slug||fallbackSlug||"", ev=g?.events?.[0]?.slug||"";
+function marketUrl(g){
+  const ms=g?.slug||"", ev=g?.events?.[0]?.slug||"";
   if(ev&&ms&&ms!==ev) return `${SITE}/event/${ev}/${ms}`;
   if(ev) return `${SITE}/event/${ev}`;
   return `${SITE}/market/${ms}`;
 }
-
-async function getJSON(url,ms=20000){
+async function getJSON(url,ms=20000,opt={}){
   const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(),ms);
-  try{ const r=await fetch(url,{signal:ctl.signal}); if(!r.ok) throw new Error(`${r.status} from ${new URL(url).host}`); return r.json(); }
+  try{ const r=await fetch(url,{...opt,signal:ctl.signal}); if(!r.ok) throw new Error(`${r.status} from ${new URL(url).host}`); return r.json(); }
   catch(e){ throw new Error(e.name==="AbortError"?`timeout on ${new URL(url).host}`:e.message); }
   finally{ clearTimeout(t); }
 }
-const setState=(msg,err)=>{const el=$("#state");el.hidden=false;el.className="state"+(err?" err":"");el.textContent=msg;};
-
-// Fast path: Gamma already carries reward fields, so page through active markets in parallel and keep the rewarded ones.
-async function fetchGammaRewards(){
-  const PAGE=500, CONC=6, MAXPAGES=40; let offset=0, seen=0, out=[];
-  while(offset<PAGE*MAXPAGES){
-    const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`)));
-    let got=0;
-    for(const p of pages){ got+=p.length; seen+=p.length; for(const g of p){
-      const rate=(g.clobRewards||[]).reduce((a,x)=>a+num(x.rewardsDailyRate),0);
-      if(rate>0) out.push(gammaRow(g,rate));
-    }}
-    setState(`Scanning… ${seen.toLocaleString()} markets checked, ${out.length} paying rewards`);
-    if(got<PAGE*CONC) break;
-    offset+=PAGE*CONC;
-  }
-  return out;
-}
-function gammaRow(g,rate){
-  let yes=0; try{yes=num(JSON.parse(g.outcomePrices||"[0]")[0])}catch(e){}
-  let tok=""; try{tok=JSON.parse(g.clobTokenIds||"[]")[0]||""}catch(e){}
-  return {cid:g.conditionId||"",tok,book:"…",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g,g.slug),
+function rowFrom(g){
+  const rate=(g.clobRewards||[]).reduce((a,x)=>a+num(x.rewardsDailyRate),0); if(rate<=0) return null;
+  let yes=0,tok=""; try{yes=num(JSON.parse(g.outcomePrices||"[0]")[0])}catch(e){} try{tok=JSON.parse(g.clobTokenIds||"[]")[0]||""}catch(e){}
+  const prev=byCid.get(g.conditionId);
+  return {cid:g.conditionId||"",tok,book:prev?.book||"…",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g),
     rate,minSize:num(g.rewardsMinSize),maxSpread:num(g.rewardsMaxSpread),spread:num(g.spread)*100,yes:yes*100,
     vol:num(g.volume24hr),liq:num(g.liquidityNum??g.liquidity),end:g.endDate||""};
 }
 
-// Fallback: CLOB sampling-markets (only rewarded markets) with loop guards, then Gamma for slugs.
-async function fetchClobRewards(){
-  const out=new Map(); let cursor="MA==", pages=0; const seenCur=new Set();
-  while(cursor&&cursor!=="LTE="&&pages<60&&!seenCur.has(cursor)){
-    seenCur.add(cursor); pages++;
-    const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
-    for(const m of page.data||[]){
-      const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
-      if(rate>0) out.set(m.condition_id,{rate,tok:m.tokens?.[0]?.token_id||"",minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""});
-    }
-    setState(`Loading from order book… ${out.size} markets`);
-    cursor=page.next_cursor;
-  }
-  const ids=[...out.keys()], gamma=new Map();
-  await Promise.all([...Array(Math.ceil(ids.length/40))].map(async(_,i)=>{
-    const qs=ids.slice(i*40,i*40+40).map(c=>"condition_ids="+c).join("&");
-    try{ for(const m of await getJSON(`${GAMMA}/markets?${qs}&limit=500`)) if(m.conditionId) gamma.set(m.conditionId,m); }catch(e){}
-  }));
-  return ids.map(cid=>{const rw=out.get(cid), g=gamma.get(cid);
-    const row=g?gammaRow(g,rw.rate):{cid,question:rw.question,event:"",url:marketUrl(null,rw.slug),rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};
-    row.tok=row.tok||rw.tok; row.book="…"; return row;});
-}
-
-// Order-book check: one CLOB call per ~50 markets. A YES book mirrors the NO book, so one token per market is enough.
-async function fetchBooks(list){
-  const byTok=new Map([...list].sort((a,b)=>b.rate-a.rate).filter(m=>m.tok).map(m=>[m.tok,m]));
-  const toks=[...byTok.keys()], apply=b=>{const m=byTok.get(b.asset_id); if(!m) return;
-    const bids=(b.bids||[]).length, asks=(b.asks||[]).length;
-    m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";};
-  let done=0;
-  const chunks=[...Array(Math.ceil(toks.length/50))].map((_,i)=>toks.slice(i*50,i*50+50));
-  const runChunk=async c=>{
-    try{ (await (await fetch(`${CLOB}/books`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.map(t=>({token_id:t})))})).json()).forEach(apply); }
-    catch(e){ await Promise.all(c.map(async t=>{ try{ apply(await getJSON(`${CLOB}/book?token_id=${t}`)); }catch(e){ byTok.get(t).book="?"; } })); }
-    done+=c.length; $("#stamp").textContent=`checking order books… ${done}/${toks.length}`;
-  };
-  for(let i=0;i<chunks.length;i+=4){ await Promise.all(chunks.slice(i,i+4).map(runChunk)); if(i%16===0) render(); }
-  list.forEach(m=>{ if(m.book==="…") m.book="?"; });
-}
-
-async function load(){
-  const btn=$("#refresh"); btn.disabled=true; setState("Loading…");
+// ---------- full scan (all reward markets) ----------
+async function fullLoad(){
+  if(busy) return; busy=true; $("#refresh").disabled=true; $("#live").className="live off";
+  const PAGE=500, CONC=6, MAXPAGES=60; let offset=0, seen=0, out=[];
   try{
-    let r=[]; let err1="";
-    try{ r=await fetchGammaRewards(); }catch(e){ err1=e.message; }
-    if(!r.length){ setState("Trying order-book source…"); r=await fetchClobRewards(); }
-    rows=r; render();
-    await fetchBooks(rows); render();
-    $("#stamp").textContent=`${rows.length} markets · updated ${new Date().toLocaleTimeString()}`;
-  }catch(e){
-    setState(`Couldn't load rewards: ${e.message}. Press F12 → Console and send me the red line if this keeps happening.`,true);
-  }finally{ btn.disabled=false; }
+    while(offset<PAGE*MAXPAGES){
+      const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`)));
+      let got=0; for(const p of pages){got+=p.length;seen+=p.length;for(const g of p){const r=rowFrom(g);if(r)out.push(r);}}
+      if(!rows.length) setState(`Scanning… ${fmt(seen)} markets checked, ${out.length} paying rewards`);
+      if(got<PAGE*CONC) break; offset+=PAGE*CONC;
+    }
+    rows=out; byCid=new Map(rows.map(m=>[m.cid,m]));
+    $("#stamp").textContent=`${fmt(rows.length)} markets · full scan ${new Date().toLocaleTimeString()}`;
+    render();
+    await liveTick(true);           // books for what's on screen first
+    checkAllBooks();                // then the rest in the background
+  }catch(e){ if(!rows.length) setState(`Couldn't load rewards: ${e.message}`,true); else $("#stamp").textContent=`refresh failed: ${e.message}`; }
+  finally{ busy=false; $("#refresh").disabled=false; }
 }
 
+// ---------- order books ----------
+function applyBook(b){const m=rows.find(x=>x.tok===b.asset_id); if(!m) return;
+  const bids=(b.bids||[]).length, asks=(b.asks||[]).length; m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";}
+async function fetchBooks(list){
+  const toks=[...new Set(list.map(m=>m.tok).filter(Boolean))]; if(!toks.length) return;
+  const tokMap=new Map(list.map(m=>[m.tok,m]));
+  for(let i=0;i<toks.length;i+=50){
+    const c=toks.slice(i,i+50);
+    try{ (await getJSON(`${CLOB}/books`,20000,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.map(t=>({token_id:t})))})).forEach(b=>{const m=tokMap.get(b.asset_id);if(m){const bids=(b.bids||[]).length,asks=(b.asks||[]).length;m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";}}); }
+    catch(e){ c.forEach(t=>{const m=tokMap.get(t); if(m&&m.book==="…") m.book="?";}); }
+  }
+}
+let bgRunning=false;
+async function checkAllBooks(){
+  if(bgRunning) return; bgRunning=true;
+  const todo=[...rows].filter(m=>m.book==="…").sort((a,b)=>b.rate-a.rate);
+  for(let i=0;i<todo.length;i+=200){
+    await Promise.all([0,50,100,150].map(o=>fetchBooks(todo.slice(i+o,i+o+50))));
+    $("#stamp").textContent=`checking order books… ${fmt(Math.min(i+200,todo.length))}/${fmt(todo.length)}`;
+    if(i%1000===0) render();
+  }
+  bgRunning=false; render(); $("#stamp").textContent=`${fmt(rows.length)} markets · books checked ${new Date().toLocaleTimeString()}`;
+}
+
+// ---------- live refresh: only what's on screen + bookmarks ----------
+function onScreen(){ const v=visible(); return v.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE); }
+async function liveTick(silent){
+  const targets=[...new Map([...onScreen(),...rows.filter(m=>favs.has(m.cid))].map(m=>[m.cid,m])).values()];
+  if(!targets.length) return;
+  try{
+    // prices/spread/volume from gamma, books from clob — in parallel
+    const cids=targets.map(m=>m.cid);
+    const gam=Promise.all([...Array(Math.ceil(cids.length/40))].map((_,i)=>getJSON(`${GAMMA}/markets?${cids.slice(i*40,i*40+40).map(c=>"condition_ids="+c).join("&")}&limit=100`).catch(()=>[])));
+    await Promise.all([fetchBooks(targets),gam.then(pages=>pages.flat().forEach(g=>{const m=byCid.get(g.conditionId);if(!m)return;const r=rowFrom(g);if(r){Object.assign(m,{spread:r.spread,yes:r.yes,vol:r.vol,liq:r.liq,rate:r.rate,minSize:r.minSize,maxSpread:r.maxSpread});}}))]);
+    $("#live").className="live"; if(!silent) $("#stamp").textContent=`${fmt(rows.length)} markets · live ${new Date().toLocaleTimeString()}`;
+    render();
+  }catch(e){ $("#live").className="live off"; }
+}
+
+// ---------- view ----------
 function visible(){
   const q=query.toLowerCase();
-  let v=rows.filter(m=>(!oneSided||m.book==="no bids"||m.book==="no asks"||m.book==="empty")&&(!chipRe||chipRe.test(m.question+" "+m.event))&&(!q||(m.question+" "+m.event).toLowerCase().includes(q)));
-  v.sort((a,b)=>{const x=a[sortK],y=b[sortK];const c=typeof x==="string"?x.localeCompare(y):x-y;return sortAsc?c:-c});
+  let v=rows.filter(m=>{
+    if(view==="one"&&!(m.book==="no bids"||m.book==="no asks"||m.book==="empty")) return false;
+    if(view==="empty"&&m.book!=="empty") return false;
+    if(view==="fav"&&!favs.has(m.cid)) return false;
+    return !q||(m.question+" "+m.event).toLowerCase().includes(q);
+  });
+  v.sort((a,b)=>{
+    let x,y; if(sortK==="book"){x=BOOK_RANK[a.book]||0;y=BOOK_RANK[b.book]||0;} else if(sortK==="fav"){x=favs.has(a.cid)?1:0;y=favs.has(b.cid)?1:0;} else {x=a[sortK];y=b[sortK];}
+    const c=typeof x==="string"?x.localeCompare(y):x-y; return (sortAsc?c:-c)||b.rate-a.rate;
+  });
   return v;
 }
-
 function render(){
-  const v=visible(), max=Math.max(1,...v.map(m=>m.rate)), tb=$("#t tbody"), fmt=n=>n.toLocaleString(undefined,{maximumFractionDigits:0});
-  tb.innerHTML=v.map(m=>`<tr>
+  const v=visible(), pages=Math.max(1,Math.ceil(v.length/PAGE_SIZE)); page=Math.min(Math.max(1,page),pages);
+  const slice=v.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE), max=Math.max(1,...v.map(m=>m.rate));
+  $("#t tbody").innerHTML=slice.map(m=>`<tr data-cid="${m.cid}">
+    <td class="star ${favs.has(m.cid)?"on":""}" title="Bookmark">${favs.has(m.cid)?"★":"☆"}</td>
     <td class="q"><a href="${m.url}" target="_blank" rel="noopener">${esc(m.question)}</a>${m.event&&m.event!==m.question?`<span class="ev">${esc(m.event)}</span>`:""}</td>
-    <td class="rate"><div class="bar"><i style="width:${(m.rate/max*110).toFixed(0)}px"></i><b>$${fmt(m.rate)}</b></div></td>
+    <td class="rate"><div class="bar"><i style="width:${(m.rate/max*100).toFixed(0)}px"></i><b>$${fmt(m.rate)}</b></div></td>
+    <td data-l="Book" class="bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
     <td data-l="Min order $">${fmt(m.minSize)}</td>
     <td data-l="Max spread ¢">${m.maxSpread.toFixed(1)}</td>
     <td data-l="Spread now ¢" class="${m.spread<=m.maxSpread?"ok":"bad"}">${m.spread.toFixed(1)}</td>
-    <td data-l="Book" class="bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
     <td data-l="Yes ¢">${m.yes.toFixed(1)}</td>
     <td data-l="24h vol $">${fmt(m.vol)}</td>
     <td data-l="Liquidity $">${fmt(m.liq)}</td>
     <td data-l="Ends" class="dim">${(m.end||"").slice(0,10)}</td>
+    <td class="open"><a href="${m.url}" target="_blank" rel="noopener">Open ↗</a></td>
   </tr>`).join("");
-  $("#total").innerHTML=`$${fmt(v.reduce((a,m)=>a+m.rate,0))}<small>/day shown (${v.length})</small>`;
-  if(v.length) $("#state").hidden=true; else setState(rows.length?"No markets match this filter.":"No reward markets right now.");
-  $("#t").hidden=!v.length;
+  $("#total").innerHTML=`$${fmt(v.reduce((a,m)=>a+m.rate,0))}<small>/day shown (${fmt(v.length)})</small>`;
+  if(v.length) $("#state").hidden=true; else setState(rows.length?(view==="fav"?"No bookmarks yet — click ☆ on any market.":"No markets match this filter."):"No reward markets right now.");
+  $("#t").hidden=!v.length; $("#pager").hidden=v.length<=PAGE_SIZE;
+  $("#pg").value=page; $("#pgn").textContent=pages; $("#pginfo").textContent=v.length?`${(page-1)*PAGE_SIZE+1}–${Math.min(page*PAGE_SIZE,v.length)} of ${fmt(v.length)}`:"";
   document.querySelectorAll("th").forEach(th=>{th.classList.toggle("on",th.dataset.k===sortK);th.classList.toggle("asc",th.dataset.k===sortK&&sortAsc)});
+  saveFavs();
 }
 
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-
-document.querySelectorAll("th").forEach(th=>th.onclick=()=>{
-  const k=th.dataset.k; if(k===sortK) sortAsc=!sortAsc; else {sortK=k;sortAsc=k==="question"||k==="end";} render();
+// ---------- events ----------
+document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; if(k===sortK) sortAsc=!sortAsc; else {sortK=k;sortAsc=k==="question"||k==="end";} page=1; render();
 });
-document.querySelectorAll(".chip[data-k]").forEach(c=>c.onclick=()=>{
-  document.querySelectorAll(".chip[data-k]").forEach(x=>x.classList.remove("on")); c.classList.add("on");
-  chipRe=c.dataset.k?new RegExp(c.dataset.k,"i"):null; render();
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); view=c.dataset.view; page=1; render();
 });
-$(".chip[data-side]").onclick=e=>{ oneSided=!oneSided; e.target.classList.toggle("on",oneSided); render(); };
-$("#q").oninput=e=>{query=e.target.value.trim();render()};
-$("#refresh").onclick=load;
+$("#t tbody").addEventListener("click",e=>{
+  const star=e.target.closest("td.star"); if(!star) return;
+  const cid=star.closest("tr").dataset.cid; favs.has(cid)?favs.delete(cid):favs.add(cid); render();
+});
+$("#q").oninput=e=>{query=e.target.value.trim();page=1;render()};
+$("#refresh").onclick=()=>fullLoad();
+$("#first").onclick=()=>{page=1;render()}; $("#prev").onclick=()=>{page--;render()};
+$("#next").onclick=()=>{page++;render()}; $("#last").onclick=()=>{page=1e9;render()};
+$("#pg").onchange=e=>{page=parseInt(e.target.value)||1;render()};
 $("#csv").onclick=()=>{
-  const v=visible(), h=["question","event","url","rate_per_day","min_size","max_spread","spread_now","book","yes","vol_24h","liquidity","ends","condition_id"];
-  const csv=[h.join(",")].concat(v.map(m=>[m.question,m.event,m.url,m.rate,m.minSize,m.maxSpread,m.spread,m.book,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
+  const v=visible(), h=["bookmarked","question","event","url","rate_per_day","book","min_size","max_spread","spread_now","yes","vol_24h","liquidity","ends","condition_id"];
+  const csv=[h.join(",")].concat(v.map(m=>[favs.has(m.cid)?"yes":"",m.question,m.event,m.url,m.rate,m.book,m.minSize,m.maxSpread,m.spread,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="polymarket-rewards.csv"; a.click();
 };
-load();
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden) liveTick(); });
+
+saveFavs();
+fullLoad().then(()=>{
+  liveTimer=setInterval(()=>{ if(!document.hidden&&!busy) liveTick(); },LIVE_MS);
+  fullTimer=setInterval(()=>{ if(!document.hidden) fullLoad(); },FULL_MS);
+});
 </script>
 </body>
 </html>
