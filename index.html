@@ -52,6 +52,8 @@ td.open a:hover{border-color:var(--link)}
 td.ok{color:var(--green)} td.bad{color:var(--red)} td.dim{color:var(--muted)}
 td.bk-nobids,td.bk-noasks{color:var(--amber);font-weight:600}
 td.bk-empty{color:var(--green);font-weight:600}
+td.bk-nobids,td.bk-noasks,td.bk-both[class*="bk-"]{}
+td.bk-nobids.near,td.bk-noasks.near,td.bk-near{color:#d9a24a;font-weight:500}
 td.bk-both{color:var(--muted)}
 tbody tr:hover{background:var(--panel)}
 .state{padding:40px 20px;color:var(--muted);text-align:center}
@@ -86,8 +88,9 @@ tbody tr:hover{background:var(--panel)}
   <button class="chip on" data-view="all">All</button>
   <button class="chip" data-view="one">One-sided only</button>
   <button class="chip" data-view="empty">Empty only</button>
+  <label class="chip" style="cursor:default">dust ≤ <input id="dust" type="number" min="0" max="20" step="0.5" value="2" style="width:48px;background:transparent;border:0;border-bottom:1px solid var(--muted);text-align:center;color:var(--amber)"> ¢</label>
   <button class="chip" data-view="fav">★ Bookmarks (<span id="favn">0</span>)</button>
-  <span class="hint">Click a column to sort · ★ to bookmark · live refresh every 10 s</span>
+  <span class="hint">~ = other side is only dust orders (≤2¢) · ★ to bookmark · live every 10 s</span>
 </div>
 <div id="state" class="state">Loading…</div>
 <table id="t" hidden>
@@ -119,13 +122,16 @@ tbody tr:hover{background:var(--panel)}
 const CLOB="https://clob.polymarket.com", GAMMA="https://gamma-api.polymarket.com", SITE="https://polymarket.com";
 const PAGE_SIZE=50, LIVE_MS=10000, FULL_MS=5*60000;
 const $=s=>document.querySelector(s);
-const BOOK_RANK={empty:3,"no bids":2,"no asks":2,both:1,"?":0,"…":0};
+const DUST=0.02; // orders at ≤2¢ (or ≥98¢ on the ask side) don't count as a real side
+const BOOK_RANK={empty:6,"no bids":5,"no asks":5,"~no bids":4,"~no asks":4,"~both":3,both:1,"?":0,"…":0};
+const ONE_SIDED=new Set(["empty","no bids","no asks","~no bids","~no asks","~both"]);
 let rows=[], byCid=new Map(), sortK="rate", sortAsc=false, view="all", query="", page=1;
 let favs=new Set(JSON.parse(localStorage.getItem("pm-rewards-favs")||"[]"));
 let liveTimer=null, fullTimer=null, busy=false;
 
 const num=x=>{const n=parseFloat(x);return Number.isFinite(n)?n:0};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const bookCls=b=>b.startsWith("~")?"bk-near":"bk-"+b.replace(/\W/g,"");
 const bidTxt=v=>v==null?"—":v.toFixed(1);
 const fmt=n=>n.toLocaleString(undefined,{maximumFractionDigits:0});
 const setState=(msg,err)=>{const el=$("#state");el.hidden=false;el.className="state"+(err?" err":"");el.textContent=msg;};
@@ -220,7 +226,14 @@ function applyBook(m,b){
   m.yesBid=bestBid==null?null:bestBid*100;
   m.noBid=bestAsk==null?null:(1-bestAsk)*100;
   m.spread=bestBid!=null&&bestAsk!=null?(bestAsk-bestBid)*100:100;
-  m.book=bids.length&&asks.length?"both":bids.length?"no asks":asks.length?"no bids":"empty";
+  const realBids=bids.filter(x=>num(x.price)>DUST).length, realAsks=asks.filter(x=>num(x.price)<1-DUST).length;
+  if(!bids.length&&!asks.length) m.book="empty";
+  else if(!bids.length) m.book="no bids";
+  else if(!asks.length) m.book="no asks";
+  else if(!realBids&&!realAsks) m.book="~both";
+  else if(!realBids) m.book="~no bids";
+  else if(!realAsks) m.book="~no asks";
+  else m.book="both";
 }
 async function fetchBooks(list){
   const toks=[...new Set(list.map(m=>m.tok).filter(Boolean))]; if(!toks.length) return;
@@ -262,7 +275,7 @@ async function liveTick(silent){
 function patchRow(m){
   const tr=document.querySelector(`tr[data-cid="${m.cid}"]`); if(!tr) return;
   const set=(sel,txt,cls)=>{const td=tr.querySelector(sel); if(!td) return; if(td.textContent!==txt) td.textContent=txt; if(cls!==undefined) td.className=cls;};
-  set("td.bk",m.book,`bk bk-${m.book.replace(/\W/g,"")}`);
+  set("td.bk",m.book,`bk ${bookCls(m.book)}`);
   set("td.yb",bidTxt(m.yesBid),`yb ${m.yesBid==null?"dim":""}`);
   set("td.nb",bidTxt(m.noBid),`nb ${m.noBid==null?"dim":""}`);
   set("td.sp",m.book==="…"?"…":m.spread.toFixed(1),`sp ${m.spread<=m.maxSpread?"ok":"bad"}`); set("td.vl",fmt(m.vol)); set("td.lq",fmt(m.liq));
@@ -277,13 +290,13 @@ function visible(){
   const q=query.toLowerCase();
   let v=rows.filter(m=>{
     if(ended(m)) return false;
-    if(view==="one"&&!(m.book==="no bids"||m.book==="no asks"||m.book==="empty")) return false;
+    if(view==="one"&&!ONE_SIDED.has(m.book)) return false;
     if(view==="empty"&&m.book!=="empty") return false;
     if(view==="fav"&&!favs.has(m.cid)) return false;
     return !q||(m.question+" "+m.event).toLowerCase().includes(q);
   });
   v.sort((a,b)=>{
-    let x,y; if(sortK==="book"){x=BOOK_RANK[a.book]||0;y=BOOK_RANK[b.book]||0;} else if(sortK==="fav"){x=favs.has(a.cid)?1:0;y=favs.has(b.cid)?1:0;} else {x=a[sortK]??(sortAsc?1e9:-1e9);y=b[sortK]??(sortAsc?1e9:-1e9);}
+    let x,y; if(sortK==="book"){x=BOOK_RANK(a.book);y=BOOK_RANK(b.book);} else if(sortK==="fav"){x=favs.has(a.cid)?1:0;y=favs.has(b.cid)?1:0;} else {x=a[sortK]??(sortAsc?1e9:-1e9);y=b[sortK]??(sortAsc?1e9:-1e9);}
     const c=typeof x==="string"?x.localeCompare(y):x-y; return (sortAsc?c:-c)||b.rate-a.rate;
   });
   return v;
@@ -295,7 +308,7 @@ function render(){
     <td class="star ${favs.has(m.cid)?"on":""}" title="Bookmark">${favs.has(m.cid)?"★":"☆"}</td>
     <td class="q"><a href="${m.url}" target="_blank" rel="noopener">${esc(m.question)}</a>${m.event&&m.event!==m.question?`<span class="ev">${esc(m.event)}</span>`:""}</td>
     <td class="rate"><div class="bar"><i style="width:${(m.rate/max*100).toFixed(0)}px"></i><b>$${fmt(m.rate)}</b></div></td>
-    <td data-l="Book" class="bk bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
+    <td data-l="Book" class="bk ${bookCls(m.book)}">${m.book}</td>
     <td data-l="Min order $">${fmt(m.minSize)}</td>
     <td data-l="Max spread ¢">${m.maxSpread.toFixed(1)}</td>
     <td data-l="Yes bid ¢" class="yb ${m.yesBid==null?"dim":""}">${bidTxt(m.yesBid)}</td>
@@ -318,14 +331,16 @@ function render(){
 document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
   const k=th.dataset.k; if(k===sortK) sortAsc=!sortAsc; else {sortK=k;sortAsc=k==="question"||k==="end";} page=1; render();
 });
-document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
-  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); view=c.dataset.view; page=1; render();
+document.querySelectorAll(".chip[data-view]").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); view=c.dataset.view; page=1;
+  if(view==="one"){sortK="book";sortAsc=false;} render();
 });
 $("#t tbody").addEventListener("click",e=>{
   const star=e.target.closest("td.star"); if(!star) return;
   const cid=star.closest("tr").dataset.cid; favs.has(cid)?favs.delete(cid):favs.add(cid);
   star.classList.toggle("on",favs.has(cid)); star.textContent=favs.has(cid)?"★":"☆"; saveFavs();
 });
+$("#dust").onchange=e=>{DUST=num(e.target.value); rows.forEach(classify); render();};
 $("#q").oninput=e=>{query=e.target.value.trim();page=1;render()};
 $("#refresh").onclick=()=>fullLoad();
 $("#first").onclick=()=>{page=1;render()}; $("#prev").onclick=()=>{page--;render()};
