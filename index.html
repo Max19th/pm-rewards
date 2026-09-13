@@ -116,48 +116,70 @@ function marketUrl(g,fallbackSlug){
   return `${SITE}/market/${ms}`;
 }
 
-async function getJSON(url){
-  const r=await fetch(url);
-  if(!r.ok) throw new Error(`${r.status} ${url}`);
-  return r.json();
+async function getJSON(url,ms=20000){
+  const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(),ms);
+  try{ const r=await fetch(url,{signal:ctl.signal}); if(!r.ok) throw new Error(`${r.status} from ${new URL(url).host}`); return r.json(); }
+  catch(e){ throw new Error(e.name==="AbortError"?`timeout on ${new URL(url).host}`:e.message); }
+  finally{ clearTimeout(t); }
+}
+const setState=(msg,err)=>{const el=$("#state");el.hidden=false;el.className="state"+(err?" err":"");el.textContent=msg;};
+
+// Fast path: Gamma already carries reward fields, so page through active markets in parallel and keep the rewarded ones.
+async function fetchGammaRewards(){
+  const PAGE=500, CONC=6, MAXPAGES=40; let offset=0, seen=0, out=[];
+  while(offset<PAGE*MAXPAGES){
+    const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`)));
+    let got=0;
+    for(const p of pages){ got+=p.length; seen+=p.length; for(const g of p){
+      const rate=(g.clobRewards||[]).reduce((a,x)=>a+num(x.rewardsDailyRate),0);
+      if(rate>0) out.push(gammaRow(g,rate));
+    }}
+    setState(`Scanning… ${seen.toLocaleString()} markets checked, ${out.length} paying rewards`);
+    if(got<PAGE*CONC) break;
+    offset+=PAGE*CONC;
+  }
+  return out;
+}
+function gammaRow(g,rate){
+  let yes=0; try{yes=num(JSON.parse(g.outcomePrices||"[0]")[0])}catch(e){}
+  return {cid:g.conditionId||"",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g,g.slug),
+    rate,minSize:num(g.rewardsMinSize),maxSpread:num(g.rewardsMaxSpread),spread:num(g.spread)*100,yes:yes*100,
+    vol:num(g.volume24hr),liq:num(g.liquidityNum??g.liquidity),end:g.endDate||""};
 }
 
-async function fetchClob(){
-  const out=new Map(); let cursor="MA==";
-  while(cursor&&cursor!=="LTE="){
+// Fallback: CLOB sampling-markets (only rewarded markets) with loop guards, then Gamma for slugs.
+async function fetchClobRewards(){
+  const out=new Map(); let cursor="MA==", pages=0; const seenCur=new Set();
+  while(cursor&&cursor!=="LTE="&&pages<60&&!seenCur.has(cursor)){
+    seenCur.add(cursor); pages++;
     const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
     for(const m of page.data||[]){
       const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
       if(rate>0) out.set(m.condition_id,{rate,minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""});
     }
+    setState(`Loading from order book… ${out.size} markets`);
     cursor=page.next_cursor;
   }
-  return out;
-}
-
-async function fetchGamma(ids){
-  const out=new Map();
-  for(let i=0;i<ids.length;i+=40){
-    const qs=ids.slice(i,i+40).map(c=>"condition_ids="+c).join("&");
-    try{ for(const m of await getJSON(`${GAMMA}/markets?${qs}&limit=500`)) if(m.conditionId) out.set(m.conditionId,m); }catch(e){}
-  }
-  return out;
+  const ids=[...out.keys()], gamma=new Map();
+  await Promise.all([...Array(Math.ceil(ids.length/40))].map(async(_,i)=>{
+    const qs=ids.slice(i*40,i*40+40).map(c=>"condition_ids="+c).join("&");
+    try{ for(const m of await getJSON(`${GAMMA}/markets?${qs}&limit=500`)) if(m.conditionId) gamma.set(m.conditionId,m); }catch(e){}
+  }));
+  return ids.map(cid=>{const rw=out.get(cid), g=gamma.get(cid);
+    return g?gammaRow(g,rw.rate):{cid,question:rw.question,event:"",url:marketUrl(null,rw.slug),rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};});
 }
 
 async function load(){
-  const btn=$("#refresh"); btn.disabled=true; $("#state").hidden=false; $("#state").className="state"; $("#state").textContent="Loading…";
+  const btn=$("#refresh"); btn.disabled=true; setState("Loading…");
   try{
-    const clob=await fetchClob(), gamma=await fetchGamma([...clob.keys()]);
-    rows=[...clob].map(([cid,rw])=>{
-      const g=gamma.get(cid); let yes=0; try{yes=num(JSON.parse(g?.outcomePrices||"[0]")[0])}catch(e){}
-      return {cid,question:g?.question||rw.question,event:g?.events?.[0]?.title||"",url:marketUrl(g,rw.slug),
-        rate:rw.rate,minSize:num(g?.rewardsMinSize)||rw.minSize,maxSpread:num(g?.rewardsMaxSpread)||rw.maxSpread,
-        spread:num(g?.spread)*100,yes:yes*100,vol:num(g?.volume24hr),liq:num(g?.liquidityNum??g?.liquidity),end:g?.endDate||rw.end};
-    });
+    let r=[]; let err1="";
+    try{ r=await fetchGammaRewards(); }catch(e){ err1=e.message; }
+    if(!r.length){ setState("Trying order-book source…"); r=await fetchClobRewards(); }
+    rows=r;
     $("#stamp").textContent=`${rows.length} markets · updated ${new Date().toLocaleTimeString()}`;
     render();
   }catch(e){
-    $("#state").className="state err"; $("#state").textContent=`Couldn't load rewards: ${e.message}. Check your connection and try Refresh.`;
+    setState(`Couldn't load rewards: ${e.message}. Press F12 → Console and send me the red line if this keeps happening.`,true);
   }finally{ btn.disabled=false; }
 }
 
@@ -182,7 +204,7 @@ function render(){
     <td data-l="Ends" class="dim">${(m.end||"").slice(0,10)}</td>
   </tr>`).join("");
   $("#total").innerHTML=`$${fmt(v.reduce((a,m)=>a+m.rate,0))}<small>/day shown (${v.length})</small>`;
-  $("#state").hidden=v.length>0; if(!v.length){$("#state").className="state";$("#state").textContent=rows.length?"No markets match this filter.":"No reward markets right now.";}
+  if(v.length) $("#state").hidden=true; else setState(rows.length?"No markets match this filter.":"No reward markets right now.");
   $("#t").hidden=!v.length;
   document.querySelectorAll("th").forEach(th=>{th.classList.toggle("on",th.dataset.k===sortK);th.classList.toggle("asc",th.dataset.k===sortK&&sortAsc)});
 }
