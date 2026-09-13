@@ -98,8 +98,9 @@ tbody tr:hover{background:var(--panel)}
     <th data-k="book">Book</th>
     <th data-k="minSize">Min order $</th>
     <th data-k="maxSpread">Max spread ¢</th>
-    <th data-k="spread">Spread now ¢</th>
-    <th data-k="yes">Yes ¢</th>
+    <th data-k="yesBid">Yes bid ¢</th>
+    <th data-k="noBid">No bid ¢</th>
+    <th data-k="spread">Spread ¢</th>
     <th data-k="vol">24h vol $</th>
     <th data-k="liq">Liquidity $</th>
     <th data-k="end">Ends</th>
@@ -125,6 +126,7 @@ let liveTimer=null, fullTimer=null, busy=false;
 
 const num=x=>{const n=parseFloat(x);return Number.isFinite(n)?n:0};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const bidTxt=v=>v==null?"—":v.toFixed(1);
 const fmt=n=>n.toLocaleString(undefined,{maximumFractionDigits:0});
 const setState=(msg,err)=>{const el=$("#state");el.hidden=false;el.className="state"+(err?" err":"");el.textContent=msg;};
 const saveFavs=()=>{localStorage.setItem("pm-rewards-favs",JSON.stringify([...favs]));$("#favn").textContent=favs.size;};
@@ -145,8 +147,8 @@ function rowFrom(g){
   const rate=(g.clobRewards||[]).reduce((a,x)=>a+num(x.rewardsDailyRate),0); if(rate<=0) return null;
   let yes=0,tok=""; try{yes=num(JSON.parse(g.outcomePrices||"[0]")[0])}catch(e){} try{tok=JSON.parse(g.clobTokenIds||"[]")[0]||""}catch(e){}
   const prev=byCid.get(g.conditionId);
-  return {cid:g.conditionId||"",tok,book:prev?.book||"…",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g),
-    rate,minSize:num(g.rewardsMinSize),maxSpread:num(g.rewardsMaxSpread),spread:num(g.spread)*100,yes:yes*100,
+  return {cid:g.conditionId||"",tok,book:prev?.book||"…",yesBid:prev?.yesBid??null,noBid:prev?.noBid??null,question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g),
+    rate,minSize:num(g.rewardsMinSize),maxSpread:num(g.rewardsMaxSpread),spread:prev?.spread??num(g.spread)*100,yes:yes*100,
     vol:num(g.volume24hr),liq:num(g.liquidityNum??g.liquidity),end:g.endDate||""};
 }
 
@@ -188,7 +190,7 @@ async function completeFromClob(){
     $("#stamp").textContent=`resolving links… ${Math.min(i+400,ids.length)}/${ids.length}`;
   }
   for(const cid of ids){ const rw=missing.get(cid), g=gam.get(cid); let r=g?rowFrom(g):null;
-    if(!r) r={cid,tok:rw.tok,book:"…",question:rw.question,event:"",url:`${SITE}/market/${rw.slug}`,rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};
+    if(!r) r={cid,tok:rw.tok,book:"…",yesBid:null,noBid:null,question:rw.question,event:"",url:`${SITE}/market/${rw.slug}`,rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};
     if(!r.tok) r.tok=rw.tok; rows.push(r); byCid.set(cid,r); }
   return ids.length;
 }
@@ -211,14 +213,21 @@ async function fullLoad(){
 }
 
 // ---------- order books ----------
-function applyBook(b){const m=rows.find(x=>x.tok===b.asset_id); if(!m) return;
-  const bids=(b.bids||[]).length, asks=(b.asks||[]).length; m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";}
+function applyBook(m,b){
+  const bids=b.bids||[], asks=b.asks||[];
+  const bestBid=bids.length?Math.max(...bids.map(x=>num(x.price))):null;
+  const bestAsk=asks.length?Math.min(...asks.map(x=>num(x.price))):null;
+  m.yesBid=bestBid==null?null:bestBid*100;
+  m.noBid=bestAsk==null?null:(1-bestAsk)*100;
+  m.spread=bestBid!=null&&bestAsk!=null?(bestAsk-bestBid)*100:100;
+  m.book=bids.length&&asks.length?"both":bids.length?"no asks":asks.length?"no bids":"empty";
+}
 async function fetchBooks(list){
   const toks=[...new Set(list.map(m=>m.tok).filter(Boolean))]; if(!toks.length) return;
   const tokMap=new Map(list.map(m=>[m.tok,m]));
   for(let i=0;i<toks.length;i+=50){
     const c=toks.slice(i,i+50);
-    try{ (await getJSON(`${CLOB}/books`,20000,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.map(t=>({token_id:t})))})).forEach(b=>{const m=tokMap.get(b.asset_id);if(m){const bids=(b.bids||[]).length,asks=(b.asks||[]).length;m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";}}); }
+    try{ (await getJSON(`${CLOB}/books`,20000,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.map(t=>({token_id:t})))})).forEach(b=>{const m=tokMap.get(b.asset_id);if(m)applyBook(m,b);}); }
     catch(e){ c.forEach(t=>{const m=tokMap.get(t); if(m&&m.book==="…") m.book="?";}); }
   }
 }
@@ -229,9 +238,9 @@ async function checkAllBooks(){
   for(let i=0;i<todo.length;i+=200){
     await Promise.all([0,50,100,150].map(o=>fetchBooks(todo.slice(i+o,i+o+50))));
     $("#stamp").textContent=`checking order books… ${fmt(Math.min(i+200,todo.length))}/${fmt(todo.length)}`;
-    if(i%1000===0) render();
+    patchVisible();
   }
-  bgRunning=false; render(); $("#stamp").textContent=`${fmt(rows.length)} markets · books checked ${new Date().toLocaleTimeString()}`;
+  bgRunning=false; patchVisible(); $("#stamp").textContent=`${fmt(rows.length)} markets · books checked ${new Date().toLocaleTimeString()}`;
 }
 
 // ---------- live refresh: only what's on screen + bookmarks ----------
@@ -243,23 +252,38 @@ async function liveTick(silent){
     // prices/spread/volume from gamma, books from clob — in parallel
     const cids=targets.map(m=>m.cid);
     const gam=Promise.all([...Array(Math.ceil(cids.length/40))].map((_,i)=>getJSON(`${GAMMA}/markets?${cids.slice(i*40,i*40+40).map(c=>"condition_ids="+c).join("&")}&limit=100`).catch(()=>[])));
-    await Promise.all([fetchBooks(targets),gam.then(pages=>pages.flat().forEach(g=>{const m=byCid.get(g.conditionId);if(!m)return;const r=rowFrom(g);if(r){Object.assign(m,{spread:r.spread,yes:r.yes,vol:r.vol,liq:r.liq,rate:r.rate,minSize:r.minSize,maxSpread:r.maxSpread});}}))]);
+    await Promise.all([fetchBooks(targets),gam.then(pages=>pages.flat().forEach(g=>{const m=byCid.get(g.conditionId);if(!m)return;const r=rowFrom(g);if(r){Object.assign(m,{yes:r.yes,vol:r.vol,liq:r.liq,rate:r.rate,minSize:r.minSize,maxSpread:r.maxSpread});}}))]);
     $("#live").className="live"; if(!silent) $("#stamp").textContent=`${fmt(rows.length)} markets · live ${new Date().toLocaleTimeString()}`;
-    render();
+    patchVisible();
   }catch(e){ $("#live").className="live off"; }
 }
+
+// ---------- in-place cell updates (never re-sorts, never moves rows) ----------
+function patchRow(m){
+  const tr=document.querySelector(`tr[data-cid="${m.cid}"]`); if(!tr) return;
+  const set=(sel,txt,cls)=>{const td=tr.querySelector(sel); if(!td) return; if(td.textContent!==txt) td.textContent=txt; if(cls!==undefined) td.className=cls;};
+  set("td.bk",m.book,`bk bk-${m.book.replace(/\W/g,"")}`);
+  set("td.yb",bidTxt(m.yesBid),`yb ${m.yesBid==null?"dim":""}`);
+  set("td.nb",bidTxt(m.noBid),`nb ${m.noBid==null?"dim":""}`);
+  set("td.sp",m.book==="…"?"…":m.spread.toFixed(1),`sp ${m.spread<=m.maxSpread?"ok":"bad"}`); set("td.vl",fmt(m.vol)); set("td.lq",fmt(m.liq));
+  const b=tr.querySelector("td.rate b"); if(b) b.textContent=`$${fmt(m.rate)}`;
+}
+function patchVisible(){ document.querySelectorAll("tr[data-cid]").forEach(tr=>{const m=byCid.get(tr.dataset.cid); if(m) patchRow(m);}); }
+const now=()=>Date.now();
+function ended(m){ const t=Date.parse(m.end||""); return Number.isFinite(t)&&t<now(); }
 
 // ---------- view ----------
 function visible(){
   const q=query.toLowerCase();
   let v=rows.filter(m=>{
+    if(ended(m)) return false;
     if(view==="one"&&!(m.book==="no bids"||m.book==="no asks"||m.book==="empty")) return false;
     if(view==="empty"&&m.book!=="empty") return false;
     if(view==="fav"&&!favs.has(m.cid)) return false;
     return !q||(m.question+" "+m.event).toLowerCase().includes(q);
   });
   v.sort((a,b)=>{
-    let x,y; if(sortK==="book"){x=BOOK_RANK[a.book]||0;y=BOOK_RANK[b.book]||0;} else if(sortK==="fav"){x=favs.has(a.cid)?1:0;y=favs.has(b.cid)?1:0;} else {x=a[sortK];y=b[sortK];}
+    let x,y; if(sortK==="book"){x=BOOK_RANK[a.book]||0;y=BOOK_RANK[b.book]||0;} else if(sortK==="fav"){x=favs.has(a.cid)?1:0;y=favs.has(b.cid)?1:0;} else {x=a[sortK]??(sortAsc?1e9:-1e9);y=b[sortK]??(sortAsc?1e9:-1e9);}
     const c=typeof x==="string"?x.localeCompare(y):x-y; return (sortAsc?c:-c)||b.rate-a.rate;
   });
   return v;
@@ -271,13 +295,14 @@ function render(){
     <td class="star ${favs.has(m.cid)?"on":""}" title="Bookmark">${favs.has(m.cid)?"★":"☆"}</td>
     <td class="q"><a href="${m.url}" target="_blank" rel="noopener">${esc(m.question)}</a>${m.event&&m.event!==m.question?`<span class="ev">${esc(m.event)}</span>`:""}</td>
     <td class="rate"><div class="bar"><i style="width:${(m.rate/max*100).toFixed(0)}px"></i><b>$${fmt(m.rate)}</b></div></td>
-    <td data-l="Book" class="bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
+    <td data-l="Book" class="bk bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
     <td data-l="Min order $">${fmt(m.minSize)}</td>
     <td data-l="Max spread ¢">${m.maxSpread.toFixed(1)}</td>
-    <td data-l="Spread now ¢" class="${m.spread<=m.maxSpread?"ok":"bad"}">${m.spread.toFixed(1)}</td>
-    <td data-l="Yes ¢">${m.yes.toFixed(1)}</td>
-    <td data-l="24h vol $">${fmt(m.vol)}</td>
-    <td data-l="Liquidity $">${fmt(m.liq)}</td>
+    <td data-l="Yes bid ¢" class="yb ${m.yesBid==null?"dim":""}">${bidTxt(m.yesBid)}</td>
+    <td data-l="No bid ¢" class="nb ${m.noBid==null?"dim":""}">${bidTxt(m.noBid)}</td>
+    <td data-l="Spread ¢" class="sp ${m.spread<=m.maxSpread?"ok":"bad"}">${m.book==="…"?"…":m.spread.toFixed(1)}</td>
+    <td data-l="24h vol $" class="vl">${fmt(m.vol)}</td>
+    <td data-l="Liquidity $" class="lq">${fmt(m.liq)}</td>
     <td data-l="Ends" class="dim">${(m.end||"").slice(0,10)}</td>
     <td class="open"><a href="${m.url}" target="_blank" rel="noopener">Open ↗</a></td>
   </tr>`).join("");
@@ -298,7 +323,8 @@ document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
 });
 $("#t tbody").addEventListener("click",e=>{
   const star=e.target.closest("td.star"); if(!star) return;
-  const cid=star.closest("tr").dataset.cid; favs.has(cid)?favs.delete(cid):favs.add(cid); render();
+  const cid=star.closest("tr").dataset.cid; favs.has(cid)?favs.delete(cid):favs.add(cid);
+  star.classList.toggle("on",favs.has(cid)); star.textContent=favs.has(cid)?"★":"☆"; saveFavs();
 });
 $("#q").oninput=e=>{query=e.target.value.trim();page=1;render()};
 $("#refresh").onclick=()=>fullLoad();
@@ -306,8 +332,8 @@ $("#first").onclick=()=>{page=1;render()}; $("#prev").onclick=()=>{page--;render
 $("#next").onclick=()=>{page++;render()}; $("#last").onclick=()=>{page=1e9;render()};
 $("#pg").onchange=e=>{page=parseInt(e.target.value)||1;render()};
 $("#csv").onclick=()=>{
-  const v=visible(), h=["bookmarked","question","event","url","rate_per_day","book","min_size","max_spread","spread_now","yes","vol_24h","liquidity","ends","condition_id"];
-  const csv=[h.join(",")].concat(v.map(m=>[favs.has(m.cid)?"yes":"",m.question,m.event,m.url,m.rate,m.book,m.minSize,m.maxSpread,m.spread,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
+  const v=visible(), h=["bookmarked","question","event","url","rate_per_day","book","min_size","max_spread","yes_bid","no_bid","spread","vol_24h","liquidity","ends","condition_id"];
+  const csv=[h.join(",")].concat(v.map(m=>[favs.has(m.cid)?"yes":"",m.question,m.event,m.url,m.rate,m.book,m.minSize,m.maxSpread,m.yesBid??"",m.noBid??"",m.spread,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="polymarket-rewards.csv"; a.click();
 };
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden) liveTick(); });
