@@ -50,6 +50,10 @@ td.rate{min-width:170px}
 td.ok{color:var(--green)}
 td.bad{color:var(--red)}
 td.dim{color:var(--muted)}
+td.bk-nobids,td.bk-noasks{color:var(--amber);font-weight:600}
+td.bk-empty{color:var(--green);font-weight:600}
+td.bk-both{color:var(--muted)}
+.chip[data-side]{border-color:var(--amber)}
 .state{padding:40px 20px;color:var(--muted);text-align:center}
 .state.err{color:var(--red)}
 tbody tr:hover{background:var(--panel)}
@@ -79,6 +83,7 @@ tbody tr:hover{background:var(--panel)}
 <div class="controls">
   <input type="search" id="q" placeholder="Search markets…" autocomplete="off">
   <button class="chip on" data-k="">All</button>
+  <button class="chip" data-side="1">One-sided only</button>
   <button class="chip" data-k="mlbb|mpl|m-league|mobile legends">MLBB</button>
   <button class="chip" data-k="cs2|counter-strike|counter strike|iem|blast|esl">CS2</button>
   <button class="chip" data-k="honor of kings|kpl|kgl|hok">HoK</button>
@@ -94,6 +99,7 @@ tbody tr:hover{background:var(--panel)}
     <th data-k="minSize">Min order $</th>
     <th data-k="maxSpread">Max spread ¢</th>
     <th data-k="spread">Spread now ¢</th>
+    <th data-k="book">Book</th>
     <th data-k="yes">Yes ¢</th>
     <th data-k="vol">24h vol $</th>
     <th data-k="liq">Liquidity $</th>
@@ -105,7 +111,7 @@ tbody tr:hover{background:var(--panel)}
 <script>
 const CLOB="https://clob.polymarket.com", GAMMA="https://gamma-api.polymarket.com", SITE="https://polymarket.com";
 const $=s=>document.querySelector(s);
-let rows=[], sortK="rate", sortAsc=false, chipRe=null, query="";
+let rows=[], sortK="rate", sortAsc=false, chipRe=null, query="", oneSided=false;
 
 const num=x=>{const n=parseFloat(x);return Number.isFinite(n)?n:0};
 
@@ -142,7 +148,8 @@ async function fetchGammaRewards(){
 }
 function gammaRow(g,rate){
   let yes=0; try{yes=num(JSON.parse(g.outcomePrices||"[0]")[0])}catch(e){}
-  return {cid:g.conditionId||"",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g,g.slug),
+  let tok=""; try{tok=JSON.parse(g.clobTokenIds||"[]")[0]||""}catch(e){}
+  return {cid:g.conditionId||"",tok,book:"…",question:g.question||"",event:g.events?.[0]?.title||"",url:marketUrl(g,g.slug),
     rate,minSize:num(g.rewardsMinSize),maxSpread:num(g.rewardsMaxSpread),spread:num(g.spread)*100,yes:yes*100,
     vol:num(g.volume24hr),liq:num(g.liquidityNum??g.liquidity),end:g.endDate||""};
 }
@@ -155,7 +162,7 @@ async function fetchClobRewards(){
     const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
     for(const m of page.data||[]){
       const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
-      if(rate>0) out.set(m.condition_id,{rate,minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""});
+      if(rate>0) out.set(m.condition_id,{rate,tok:m.tokens?.[0]?.token_id||"",minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""});
     }
     setState(`Loading from order book… ${out.size} markets`);
     cursor=page.next_cursor;
@@ -166,7 +173,25 @@ async function fetchClobRewards(){
     try{ for(const m of await getJSON(`${GAMMA}/markets?${qs}&limit=500`)) if(m.conditionId) gamma.set(m.conditionId,m); }catch(e){}
   }));
   return ids.map(cid=>{const rw=out.get(cid), g=gamma.get(cid);
-    return g?gammaRow(g,rw.rate):{cid,question:rw.question,event:"",url:marketUrl(null,rw.slug),rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};});
+    const row=g?gammaRow(g,rw.rate):{cid,question:rw.question,event:"",url:marketUrl(null,rw.slug),rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};
+    row.tok=row.tok||rw.tok; row.book="…"; return row;});
+}
+
+// Order-book check: one CLOB call per ~50 markets. A YES book mirrors the NO book, so one token per market is enough.
+async function fetchBooks(list){
+  const byTok=new Map([...list].sort((a,b)=>b.rate-a.rate).filter(m=>m.tok).map(m=>[m.tok,m]));
+  const toks=[...byTok.keys()], apply=b=>{const m=byTok.get(b.asset_id); if(!m) return;
+    const bids=(b.bids||[]).length, asks=(b.asks||[]).length;
+    m.book=bids&&asks?"both":bids?"no asks":asks?"no bids":"empty";};
+  let done=0;
+  const chunks=[...Array(Math.ceil(toks.length/50))].map((_,i)=>toks.slice(i*50,i*50+50));
+  const runChunk=async c=>{
+    try{ (await (await fetch(`${CLOB}/books`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(c.map(t=>({token_id:t})))})).json()).forEach(apply); }
+    catch(e){ await Promise.all(c.map(async t=>{ try{ apply(await getJSON(`${CLOB}/book?token_id=${t}`)); }catch(e){ byTok.get(t).book="?"; } })); }
+    done+=c.length; $("#stamp").textContent=`checking order books… ${done}/${toks.length}`;
+  };
+  for(let i=0;i<chunks.length;i+=4){ await Promise.all(chunks.slice(i,i+4).map(runChunk)); if(i%16===0) render(); }
+  list.forEach(m=>{ if(m.book==="…") m.book="?"; });
 }
 
 async function load(){
@@ -175,9 +200,9 @@ async function load(){
     let r=[]; let err1="";
     try{ r=await fetchGammaRewards(); }catch(e){ err1=e.message; }
     if(!r.length){ setState("Trying order-book source…"); r=await fetchClobRewards(); }
-    rows=r;
+    rows=r; render();
+    await fetchBooks(rows); render();
     $("#stamp").textContent=`${rows.length} markets · updated ${new Date().toLocaleTimeString()}`;
-    render();
   }catch(e){
     setState(`Couldn't load rewards: ${e.message}. Press F12 → Console and send me the red line if this keeps happening.`,true);
   }finally{ btn.disabled=false; }
@@ -185,7 +210,7 @@ async function load(){
 
 function visible(){
   const q=query.toLowerCase();
-  let v=rows.filter(m=>(!chipRe||chipRe.test(m.question+" "+m.event))&&(!q||(m.question+" "+m.event).toLowerCase().includes(q)));
+  let v=rows.filter(m=>(!oneSided||m.book==="no bids"||m.book==="no asks"||m.book==="empty")&&(!chipRe||chipRe.test(m.question+" "+m.event))&&(!q||(m.question+" "+m.event).toLowerCase().includes(q)));
   v.sort((a,b)=>{const x=a[sortK],y=b[sortK];const c=typeof x==="string"?x.localeCompare(y):x-y;return sortAsc?c:-c});
   return v;
 }
@@ -198,6 +223,7 @@ function render(){
     <td data-l="Min order $">${fmt(m.minSize)}</td>
     <td data-l="Max spread ¢">${m.maxSpread.toFixed(1)}</td>
     <td data-l="Spread now ¢" class="${m.spread<=m.maxSpread?"ok":"bad"}">${m.spread.toFixed(1)}</td>
+    <td data-l="Book" class="bk-${m.book.replace(/\W/g,"")}">${m.book}</td>
     <td data-l="Yes ¢">${m.yes.toFixed(1)}</td>
     <td data-l="24h vol $">${fmt(m.vol)}</td>
     <td data-l="Liquidity $">${fmt(m.liq)}</td>
@@ -214,15 +240,16 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 document.querySelectorAll("th").forEach(th=>th.onclick=()=>{
   const k=th.dataset.k; if(k===sortK) sortAsc=!sortAsc; else {sortK=k;sortAsc=k==="question"||k==="end";} render();
 });
-document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
-  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on");
+document.querySelectorAll(".chip[data-k]").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll(".chip[data-k]").forEach(x=>x.classList.remove("on")); c.classList.add("on");
   chipRe=c.dataset.k?new RegExp(c.dataset.k,"i"):null; render();
 });
+$(".chip[data-side]").onclick=e=>{ oneSided=!oneSided; e.target.classList.toggle("on",oneSided); render(); };
 $("#q").oninput=e=>{query=e.target.value.trim();render()};
 $("#refresh").onclick=load;
 $("#csv").onclick=()=>{
-  const v=visible(), h=["question","event","url","rate_per_day","min_size","max_spread","spread_now","yes","vol_24h","liquidity","ends","condition_id"];
-  const csv=[h.join(",")].concat(v.map(m=>[m.question,m.event,m.url,m.rate,m.minSize,m.maxSpread,m.spread,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
+  const v=visible(), h=["question","event","url","rate_per_day","min_size","max_spread","spread_now","book","yes","vol_24h","liquidity","ends","condition_id"];
+  const csv=[h.join(",")].concat(v.map(m=>[m.question,m.event,m.url,m.rate,m.minSize,m.maxSpread,m.spread,m.book,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="polymarket-rewards.csv"; a.click();
 };
 load();
