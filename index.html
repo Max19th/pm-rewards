@@ -151,22 +151,48 @@ function rowFrom(g){
 }
 
 // ---------- full scan (all reward markets) ----------
+async function scanGamma(){
+  const PAGE=500, CONC=6, MAXPAGES=80; let offset=0, seen=0, out=[], stop=false;
+  while(offset<PAGE*MAXPAGES&&!stop){
+    const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`).catch(()=>null)));
+    for(const p of pages){ if(!p){stop=true;break;} seen+=p.length; for(const g of p){const r=rowFrom(g);if(r)out.push(r);} if(p.length<PAGE){stop=true;break;} }
+    if(!rows.length) setState(`Scanning… ${fmt(seen)} markets checked, ${out.length} paying rewards`);
+    offset+=PAGE*CONC;
+  }
+  return out;
+}
+async function scanClob(){
+  const raw=new Map(); let cursor="MA==", n=0; const seenCur=new Set();
+  while(cursor&&cursor!=="LTE="&&n++<400&&!seenCur.has(cursor)){
+    seenCur.add(cursor);
+    const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
+    for(const m of page.data||[]){ const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
+      if(rate>0) raw.set(m.condition_id,{rate,tok:m.tokens?.[0]?.token_id||"",minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""}); }
+    if(!rows.length) setState(`Loading from order book… ${raw.size} reward markets`);
+    cursor=page.next_cursor;
+  }
+  const ids=[...raw.keys()], gam=new Map();
+  for(let i=0;i<ids.length;i+=400){
+    await Promise.all([...Array(10)].map(async(_,j)=>{ const c=ids.slice(i+j*40,i+j*40+40); if(!c.length) return;
+      try{ for(const g of await getJSON(`${GAMMA}/markets?${c.map(x=>"condition_ids="+x).join("&")}&limit=100`)) if(g.conditionId) gam.set(g.conditionId,g); }catch(e){} }));
+    if(!rows.length) setState(`Resolving links… ${Math.min(i+400,ids.length)}/${ids.length}`);
+  }
+  return ids.map(cid=>{ const rw=raw.get(cid), g=gam.get(cid), prev=byCid.get(cid);
+    if(g){ const r=rowFrom(g); if(r){ if(!r.tok) r.tok=rw.tok; return r; } }
+    return {cid,tok:rw.tok,book:prev?.book||"…",question:rw.question,event:"",url:`${SITE}/market/${rw.slug}`,rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end}; });
+}
 async function fullLoad(){
   if(busy) return; busy=true; $("#refresh").disabled=true; $("#live").className="live off";
-  const PAGE=500, CONC=6, MAXPAGES=60; let offset=0, seen=0, out=[];
   try{
-    while(offset<PAGE*MAXPAGES){
-      const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`)));
-      let got=0; for(const p of pages){got+=p.length;seen+=p.length;for(const g of p){const r=rowFrom(g);if(r)out.push(r);}}
-      if(!rows.length) setState(`Scanning… ${fmt(seen)} markets checked, ${out.length} paying rewards`);
-      if(got<PAGE*CONC) break; offset+=PAGE*CONC;
-    }
+    let out=[]; try{ out=await scanGamma(); }catch(e){}
+    if(!out.length) out=await scanClob();
+    if(!out.length) throw new Error("both sources returned nothing");
     rows=out; byCid=new Map(rows.map(m=>[m.cid,m]));
     $("#stamp").textContent=`${fmt(rows.length)} markets · full scan ${new Date().toLocaleTimeString()}`;
     render();
-    await liveTick(true);           // books for what's on screen first
-    checkAllBooks();                // then the rest in the background
-  }catch(e){ if(!rows.length) setState(`Couldn't load rewards: ${e.message}`,true); else $("#stamp").textContent=`refresh failed: ${e.message}`; }
+    await liveTick(true);
+    checkAllBooks();
+  }catch(e){ if(!rows.length) setState(`Couldn't load rewards: ${e.message}. Press Refresh all to retry.`,true); else $("#stamp").textContent=`refresh failed: ${e.message}`; }
   finally{ busy=false; $("#refresh").disabled=false; }
 }
 
