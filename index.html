@@ -154,37 +154,45 @@ function rowFrom(g){
 async function scanGamma(){
   const q=(limit,offset)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${limit}&offset=${offset}`);
   const first=await q(500,0); if(!first.length) return [];
-  const PAGE=first.length, CONC=8, MAXPAGES=400; let out=[], seen=0, stop=false, offset=PAGE;
+  const PAGE=first.length, CONC=8, MAXPAGES=600; let out=[], seen=0, offset=PAGE, deadBatches=0;
   const take=p=>{seen+=p.length;for(const g of p){const r=rowFrom(g);if(r)out.push(r);}};
   take(first);
-  while(!stop&&offset<PAGE*MAXPAGES){
+  while(offset<PAGE*MAXPAGES){
     const pages=await Promise.all([...Array(CONC)].map((_,i)=>q(PAGE,offset+i*PAGE).catch(()=>null)));
-    for(const p of pages){ if(!p||!p.length){stop=true;break;} take(p); if(p.length<PAGE){stop=true;break;} }
+    let got=0, errs=0; for(const p of pages){ if(!p){errs++;continue;} got+=p.length; take(p); }
     if(!rows.length) setState(`Scanning… ${fmt(seen)} markets checked, ${out.length} paying rewards`);
+    if(got===0){ if(++deadBatches>=2) break; } else deadBatches=0;
+    if(errs===CONC) break;
     offset+=PAGE*CONC;
   }
   return out;
 }
-async function scanClob(){
-  const raw=new Map(); let cursor="MA==", n=0; const seenCur=new Set();
-  while(cursor&&cursor!=="LTE="&&n++<400&&!seenCur.has(cursor)){
-    seenCur.add(cursor);
-    const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
-    for(const m of page.data||[]){ const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
-      if(rate>0) raw.set(m.condition_id,{rate,tok:m.tokens?.[0]?.token_id||"",minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""}); }
-    if(!rows.length) setState(`Loading from order book… ${raw.size} reward markets`);
-    cursor=page.next_cursor;
-  }
-  const ids=[...raw.keys()], gam=new Map();
+// CLOB sampling-markets = exactly what polymarket.com/rewards lists. Walk it and add anything Gamma missed.
+async function completeFromClob(){
+  const missing=new Map(); let cursor="MA==", n=0, total=0; const seenCur=new Set();
+  try{
+    while(cursor&&cursor!=="LTE="&&n++<600&&!seenCur.has(cursor)){
+      seenCur.add(cursor);
+      const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
+      for(const m of page.data||[]){ total++; const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
+        if(rate>0&&!byCid.has(m.condition_id)) missing.set(m.condition_id,{rate,tok:m.tokens?.[0]?.token_id||"",minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""}); }
+      $("#stamp").textContent=`cross-checking rewards list… ${fmt(total)} seen, ${missing.size} to add`;
+      cursor=page.next_cursor;
+    }
+  }catch(e){ $("#stamp").textContent=`cross-check stopped: ${e.message}`; }
+  if(!missing.size) return 0;
+  const ids=[...missing.keys()], gam=new Map();
   for(let i=0;i<ids.length;i+=400){
     await Promise.all([...Array(10)].map(async(_,j)=>{ const c=ids.slice(i+j*40,i+j*40+40); if(!c.length) return;
       try{ for(const g of await getJSON(`${GAMMA}/markets?${c.map(x=>"condition_ids="+x).join("&")}&limit=100`)) if(g.conditionId) gam.set(g.conditionId,g); }catch(e){} }));
-    if(!rows.length) setState(`Resolving links… ${Math.min(i+400,ids.length)}/${ids.length}`);
+    $("#stamp").textContent=`resolving links… ${Math.min(i+400,ids.length)}/${ids.length}`;
   }
-  return ids.map(cid=>{ const rw=raw.get(cid), g=gam.get(cid), prev=byCid.get(cid);
-    if(g){ const r=rowFrom(g); if(r){ if(!r.tok) r.tok=rw.tok; return r; } }
-    return {cid,tok:rw.tok,book:prev?.book||"…",question:rw.question,event:"",url:`${SITE}/market/${rw.slug}`,rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end}; });
+  for(const cid of ids){ const rw=missing.get(cid), g=gam.get(cid); let r=g?rowFrom(g):null;
+    if(!r) r={cid,tok:rw.tok,book:"…",question:rw.question,event:"",url:`${SITE}/market/${rw.slug}`,rate:rw.rate,minSize:rw.minSize,maxSpread:rw.maxSpread,spread:0,yes:0,vol:0,liq:0,end:rw.end};
+    if(!r.tok) r.tok=rw.tok; rows.push(r); byCid.set(cid,r); }
+  return ids.length;
 }
+async function scanClob(){ rows=[]; byCid=new Map(); await completeFromClob(); return rows; }
 async function fullLoad(){
   if(busy) return; busy=true; $("#refresh").disabled=true; $("#live").className="live off";
   try{
@@ -195,6 +203,8 @@ async function fullLoad(){
     $("#stamp").textContent=`${fmt(rows.length)} markets · full scan ${new Date().toLocaleTimeString()}`;
     render();
     await liveTick(true);
+    const added=await completeFromClob(); if(added) render();
+    $("#stamp").textContent=`${fmt(rows.length)} markets · full scan ${new Date().toLocaleTimeString()}`;
     checkAllBooks();
   }catch(e){ if(!rows.length) setState(`Couldn't load rewards: ${e.message}. Press Refresh all to retry.`,true); else $("#stamp").textContent=`refresh failed: ${e.message}`; }
   finally{ busy=false; $("#refresh").disabled=false; }
