@@ -152,10 +152,14 @@ function rowFrom(g){
 
 // ---------- full scan (all reward markets) ----------
 async function scanGamma(){
-  const PAGE=500, CONC=6, MAXPAGES=80; let offset=0, seen=0, out=[], stop=false;
-  while(offset<PAGE*MAXPAGES&&!stop){
-    const pages=await Promise.all([...Array(CONC)].map((_,i)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${PAGE}&offset=${offset+i*PAGE}`).catch(()=>null)));
-    for(const p of pages){ if(!p){stop=true;break;} seen+=p.length; for(const g of p){const r=rowFrom(g);if(r)out.push(r);} if(p.length<PAGE){stop=true;break;} }
+  const q=(limit,offset)=>getJSON(`${GAMMA}/markets?active=true&closed=false&limit=${limit}&offset=${offset}`);
+  const first=await q(500,0); if(!first.length) return [];
+  const PAGE=first.length, CONC=8, MAXPAGES=400; let out=[], seen=0, stop=false, offset=PAGE;
+  const take=p=>{seen+=p.length;for(const g of p){const r=rowFrom(g);if(r)out.push(r);}};
+  take(first);
+  while(!stop&&offset<PAGE*MAXPAGES){
+    const pages=await Promise.all([...Array(CONC)].map((_,i)=>q(PAGE,offset+i*PAGE).catch(()=>null)));
+    for(const p of pages){ if(!p||!p.length){stop=true;break;} take(p); if(p.length<PAGE){stop=true;break;} }
     if(!rows.length) setState(`Scanning… ${fmt(seen)} markets checked, ${out.length} paying rewards`);
     offset+=PAGE*CONC;
   }
