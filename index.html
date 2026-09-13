@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polymarket LP rewards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#182130; --panel:#1f2a3b; --line:#2c3a4f; --text:#e8eef6; --muted:#8a9bb2;
+  --amber:#f2b544; --amber-dim:#5a4520; --green:#4fd18b; --red:#f06a6a; --link:#9ec5ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 "IBM Plex Sans",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+a{color:var(--link)}
+button,input,select{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+h1{font-size:19px;font-weight:600;margin:0}
+.total{color:var(--amber);font-weight:600;font-size:19px}
+.total small{color:var(--muted);font-weight:400;font-size:13px;margin-left:6px}
+.spacer{flex:1}
+.stamp{color:var(--muted);font-size:13px}
+button{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button.primary{background:var(--amber);color:#1a1300;border-color:var(--amber);font-weight:600}
+button[disabled]{opacity:.5;cursor:wait}
+.controls{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+input[type=search]{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 10px;min-width:220px}
+.chip{border-radius:999px;padding:5px 12px;font-size:13px}
+.chip.on{background:var(--amber-dim);border-color:var(--amber);color:var(--amber)}
+.hint{color:var(--muted);font-size:13px;margin-left:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:57px;background:var(--bg);color:var(--muted);font-weight:500;font-size:13px;cursor:pointer;user-select:none}
+th:hover{color:var(--text)}
+th.on{color:var(--text)}
+th.on::after{content:" ▾";color:var(--amber)}
+th.on.asc::after{content:" ▴"}
+th:first-child,td:first-child{text-align:left;padding-left:20px}
+td.q{white-space:normal;max-width:520px}
+td.q a{text-decoration:none;font-weight:500;color:var(--text)}
+td.q a:hover{color:var(--link);text-decoration:underline}
+td.q .ev{display:block;color:var(--muted);font-size:12.5px}
+td.rate{min-width:170px}
+.bar{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.bar i{display:block;height:8px;border-radius:2px;background:var(--amber)}
+.bar b{font-weight:600;color:var(--amber);min-width:52px;text-align:right}
+td.ok{color:var(--green)}
+td.bad{color:var(--red)}
+td.dim{color:var(--muted)}
+.state{padding:40px 20px;color:var(--muted);text-align:center}
+.state.err{color:var(--red)}
+tbody tr:hover{background:var(--panel)}
+@media (max-width:760px){
+  th{display:none}
+  table,tbody,tr,td{display:block}
+  tr{padding:10px 16px;border-bottom:1px solid var(--line)}
+  td{border:0;padding:2px 0;text-align:left;white-space:normal}
+  td:first-child{padding-left:0}
+  td.rate .bar{justify-content:flex-start}
+  td[data-l]::before{content:attr(data-l) " ";color:var(--muted);font-size:12.5px}
+  td.rate::before{display:none}
+  .top{padding:12px 16px}
+}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .25s}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Polymarket LP rewards</h1>
+  <div class="total" id="total">—<small>/day shown</small></div>
+  <div class="spacer"></div>
+  <span class="stamp" id="stamp"></span>
+  <button id="csv">Download CSV</button>
+  <button class="primary" id="refresh">Refresh</button>
+</header>
+<div class="controls">
+  <input type="search" id="q" placeholder="Search markets…" autocomplete="off">
+  <button class="chip on" data-k="">All</button>
+  <button class="chip" data-k="mlbb|mpl|m-league|mobile legends">MLBB</button>
+  <button class="chip" data-k="cs2|counter-strike|counter strike|iem|blast|esl">CS2</button>
+  <button class="chip" data-k="honor of kings|kpl|kgl|hok">HoK</button>
+  <button class="chip" data-k="dota|valorant|lol|league of legends|lck|lpl|worlds">Other esports</button>
+  <button class="chip" data-k="bitcoin|btc|ethereum|eth|solana|sol|crypto">Crypto</button>
+  <span class="hint">Click a column to sort · click a market to open it</span>
+</div>
+<div id="state" class="state">Loading…</div>
+<table id="t" hidden>
+  <thead><tr>
+    <th data-k="question" class="q">Market</th>
+    <th data-k="rate" class="on">Reward $/day</th>
+    <th data-k="minSize">Min order $</th>
+    <th data-k="maxSpread">Max spread ¢</th>
+    <th data-k="spread">Spread now ¢</th>
+    <th data-k="yes">Yes ¢</th>
+    <th data-k="vol">24h vol $</th>
+    <th data-k="liq">Liquidity $</th>
+    <th data-k="end">Ends</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<script>
+const CLOB="https://clob.polymarket.com", GAMMA="https://gamma-api.polymarket.com", SITE="https://polymarket.com";
+const $=s=>document.querySelector(s);
+let rows=[], sortK="rate", sortAsc=false, chipRe=null, query="";
+
+const num=x=>{const n=parseFloat(x);return Number.isFinite(n)?n:0};
+
+function marketUrl(g,fallbackSlug){
+  const ms=g?.slug||fallbackSlug||"", ev=g?.events?.[0]?.slug||"";
+  if(ev&&ms&&ms!==ev) return `${SITE}/event/${ev}/${ms}`;
+  if(ev) return `${SITE}/event/${ev}`;
+  return `${SITE}/market/${ms}`;
+}
+
+async function getJSON(url){
+  const r=await fetch(url);
+  if(!r.ok) throw new Error(`${r.status} ${url}`);
+  return r.json();
+}
+
+async function fetchClob(){
+  const out=new Map(); let cursor="MA==";
+  while(cursor&&cursor!=="LTE="){
+    const page=await getJSON(`${CLOB}/sampling-markets?next_cursor=${encodeURIComponent(cursor)}`);
+    for(const m of page.data||[]){
+      const rw=m.rewards||{}, rate=(rw.rates||[]).reduce((a,x)=>a+num(x.rewards_daily_rate),0);
+      if(rate>0) out.set(m.condition_id,{rate,minSize:num(rw.min_size),maxSpread:num(rw.max_spread),question:m.question||"",slug:m.market_slug||"",end:m.end_date_iso||""});
+    }
+    cursor=page.next_cursor;
+  }
+  return out;
+}
+
+async function fetchGamma(ids){
+  const out=new Map();
+  for(let i=0;i<ids.length;i+=40){
+    const qs=ids.slice(i,i+40).map(c=>"condition_ids="+c).join("&");
+    try{ for(const m of await getJSON(`${GAMMA}/markets?${qs}&limit=500`)) if(m.conditionId) out.set(m.conditionId,m); }catch(e){}
+  }
+  return out;
+}
+
+async function load(){
+  const btn=$("#refresh"); btn.disabled=true; $("#state").hidden=false; $("#state").className="state"; $("#state").textContent="Loading…";
+  try{
+    const clob=await fetchClob(), gamma=await fetchGamma([...clob.keys()]);
+    rows=[...clob].map(([cid,rw])=>{
+      const g=gamma.get(cid); let yes=0; try{yes=num(JSON.parse(g?.outcomePrices||"[0]")[0])}catch(e){}
+      return {cid,question:g?.question||rw.question,event:g?.events?.[0]?.title||"",url:marketUrl(g,rw.slug),
+        rate:rw.rate,minSize:num(g?.rewardsMinSize)||rw.minSize,maxSpread:num(g?.rewardsMaxSpread)||rw.maxSpread,
+        spread:num(g?.spread)*100,yes:yes*100,vol:num(g?.volume24hr),liq:num(g?.liquidityNum??g?.liquidity),end:g?.endDate||rw.end};
+    });
+    $("#stamp").textContent=`${rows.length} markets · updated ${new Date().toLocaleTimeString()}`;
+    render();
+  }catch(e){
+    $("#state").className="state err"; $("#state").textContent=`Couldn't load rewards: ${e.message}. Check your connection and try Refresh.`;
+  }finally{ btn.disabled=false; }
+}
+
+function visible(){
+  const q=query.toLowerCase();
+  let v=rows.filter(m=>(!chipRe||chipRe.test(m.question+" "+m.event))&&(!q||(m.question+" "+m.event).toLowerCase().includes(q)));
+  v.sort((a,b)=>{const x=a[sortK],y=b[sortK];const c=typeof x==="string"?x.localeCompare(y):x-y;return sortAsc?c:-c});
+  return v;
+}
+
+function render(){
+  const v=visible(), max=Math.max(1,...v.map(m=>m.rate)), tb=$("#t tbody"), fmt=n=>n.toLocaleString(undefined,{maximumFractionDigits:0});
+  tb.innerHTML=v.map(m=>`<tr>
+    <td class="q"><a href="${m.url}" target="_blank" rel="noopener">${esc(m.question)}</a>${m.event&&m.event!==m.question?`<span class="ev">${esc(m.event)}</span>`:""}</td>
+    <td class="rate"><div class="bar"><i style="width:${(m.rate/max*110).toFixed(0)}px"></i><b>$${fmt(m.rate)}</b></div></td>
+    <td data-l="Min order $">${fmt(m.minSize)}</td>
+    <td data-l="Max spread ¢">${m.maxSpread.toFixed(1)}</td>
+    <td data-l="Spread now ¢" class="${m.spread<=m.maxSpread?"ok":"bad"}">${m.spread.toFixed(1)}</td>
+    <td data-l="Yes ¢">${m.yes.toFixed(1)}</td>
+    <td data-l="24h vol $">${fmt(m.vol)}</td>
+    <td data-l="Liquidity $">${fmt(m.liq)}</td>
+    <td data-l="Ends" class="dim">${(m.end||"").slice(0,10)}</td>
+  </tr>`).join("");
+  $("#total").innerHTML=`$${fmt(v.reduce((a,m)=>a+m.rate,0))}<small>/day shown (${v.length})</small>`;
+  $("#state").hidden=v.length>0; if(!v.length){$("#state").className="state";$("#state").textContent=rows.length?"No markets match this filter.":"No reward markets right now.";}
+  $("#t").hidden=!v.length;
+  document.querySelectorAll("th").forEach(th=>{th.classList.toggle("on",th.dataset.k===sortK);th.classList.toggle("asc",th.dataset.k===sortK&&sortAsc)});
+}
+
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+document.querySelectorAll("th").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; if(k===sortK) sortAsc=!sortAsc; else {sortK=k;sortAsc=k==="question"||k==="end";} render();
+});
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on");
+  chipRe=c.dataset.k?new RegExp(c.dataset.k,"i"):null; render();
+});
+$("#q").oninput=e=>{query=e.target.value.trim();render()};
+$("#refresh").onclick=load;
+$("#csv").onclick=()=>{
+  const v=visible(), h=["question","event","url","rate_per_day","min_size","max_spread","spread_now","yes","vol_24h","liquidity","ends","condition_id"];
+  const csv=[h.join(",")].concat(v.map(m=>[m.question,m.event,m.url,m.rate,m.minSize,m.maxSpread,m.spread,m.yes,m.vol,m.liq,m.end,m.cid].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(","))).join("\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download="polymarket-rewards.csv"; a.click();
+};
+load();
+</script>
+</body>
+</html>
